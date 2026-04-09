@@ -1,5 +1,8 @@
-streamlit>=1.32.0
-plotly>=5.18.0
-pandas>=2.0.0
-
-faster-whisper>=1.0.0
+streamlit==1.32.0
+pandas==2.2.1
+plotly==5.19.0
+faster-whisper==1.0.1
+pyannote.audio==3.1.1
+python-dotenv==1.0.1
+torch==2.2.2
+torchaudio==2.2.2

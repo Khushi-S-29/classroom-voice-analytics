@@ -1,59 +1,11 @@
 import re
 from typing import List, Dict
 
-
-_RE_STUDENT_ADDR = re.compile(
-    r'\b(मैडम|दीदी|madam|ma\'am|sir|सर)\b', re.IGNORECASE
-)
-
-_STUDENT_EXACT = frozenset([
-    "हाँ", "हां", "जी", "हाँ जी", "जी हाँ",
-    "yes", "no", "okay", "ok", "hmm", "ji",
-])
-
-_RE_TEACHER = re.compile(
-    r'(बताओ|लिखो|खोलो|सुनो|पढ़ो|देखो|समझे|याद करो|चाहती|चाहता|'
-    r'शाबाश|बिल्कुल सही|बहुत अच्छे|ठीक है|नमस्ते|आज हम|'
-    r'open your|turn to page|very good|excellent|well done|'
-    r'write down|pay attention|today we|let\'s begin|repeat after)',
-    re.IGNORECASE
-)
-
-_RE_TEACHER_NEGATION = re.compile(r'^(नहीं|no)[,،]\s*\S+\s+\S+\s+\S+\s+\S+', re.IGNORECASE)
-
 _RE_QUESTION = re.compile(
-    r'(क्या|कौन|कब|कहाँ|क्यों|कैसे|कितना|किसने|'
+    r'(क्या|कौन|कब|कहाँ|क्यों|कैसे|कितना|किसने|\?|'
     r'\bwhat\b|\bwho\b|\bwhen\b|\bwhere\b|\bwhy\b|\bhow\b|\bwhich\b)',
     re.IGNORECASE
 )
-
-
-
-def classify_speaker(text: str, prev_speaker: str = "TEACHER") -> str:
-    t  = text.strip()
-    tl = t.lower()
-    wc = len(t.split())
-
-    if _RE_STUDENT_ADDR.search(t):
-        return "STUDENT"
-
-    if _RE_TEACHER_NEGATION.match(t):
-        return "TEACHER"
-
-    if _RE_TEACHER.search(t):
-        return "TEACHER"
-
-    if tl in _STUDENT_EXACT:
-        return "STUDENT"
-
-    if wc <= 3 and prev_speaker == "TEACHER":
-        return "STUDENT"
-
-    if wc > 15:
-        return "TEACHER"
-
-    return prev_speaker
-
 
 
 def is_question(text: str) -> bool:
@@ -71,37 +23,34 @@ def detect_silences(segments: List[Dict], min_gap: float = 1.5) -> List[Dict]:
         if segments[i]["start"] - segments[i - 1]["end"] >= min_gap
     ]
 
+
 def analyze_transcript(transcript: dict) -> dict:
     segments       = transcript.get("segments", [])
     total_duration = transcript.get("duration", 0) or 1
 
-    labeled, prev_speaker = [], "TEACHER"
-    for seg in segments:
-        speaker  = classify_speaker(seg["text"], prev_speaker)
-        question = is_question(seg["text"])
-        labeled.append({**seg, "speaker": speaker, "is_question": question})
-        prev_speaker = speaker
+    labeled = [{**seg, "is_question": is_question(seg["text"])} for seg in segments]
 
-    teacher_time = sum(s["duration"] for s in labeled if s["speaker"] == "TEACHER")
-    student_time = sum(s["duration"] for s in labeled if s["speaker"] == "STUDENT")
+    teacher_time = sum(s["duration"] for s in labeled if s.get("role") == "TEACHER")
+    student_time = sum(s["duration"] for s in labeled if s.get("role") == "STUDENT")
     spoken_time  = teacher_time + student_time or 1
 
     silences     = detect_silences(segments)
     silence_time = sum(s["duration"] for s in silences)
 
-    teacher_questions = [s for s in labeled if s["speaker"] == "TEACHER" and s["is_question"]]
-    student_questions = [s for s in labeled if s["speaker"] == "STUDENT" and s["is_question"]]
-    student_responses = [s for s in labeled if s["speaker"] == "STUDENT" and not s["is_question"]]
+    teacher_questions = [s for s in labeled if s.get("role") == "TEACHER" and s["is_question"]]
+    student_questions = [s for s in labeled if s.get("role") == "STUDENT" and s["is_question"]]
+    student_responses = [s for s in labeled if s.get("role") == "STUDENT" and not s["is_question"]]
 
     alternations = sum(
         1 for i in range(1, len(labeled))
-        if labeled[i]["speaker"] != labeled[i - 1]["speaker"]
+        if labeled[i].get("role") != labeled[i - 1].get("role")
     )
 
+    #  Metrics 
     tdr = round(teacher_time / spoken_time, 3)
 
     total_turns   = len(labeled) or 1
-    student_turns = sum(1 for s in labeled if s["speaker"] == "STUDENT")
+    student_turns = sum(1 for s in labeled if s.get("role") == "STUDENT")
     spi = round(min(1.0, student_turns / total_turns + 0.05 * len(student_questions)), 3)
 
     duration_min        = total_duration / 60 or 1
@@ -109,17 +58,10 @@ def analyze_transcript(transcript: dict) -> dict:
 
     qrr = round(
         min(1.0, len(student_responses) / len(teacher_questions))
-        if teacher_questions else 0.0,
-        3
+        if teacher_questions else 0.0, 3
     )
 
-    score = sum([
-        tdr < 0.75,
-        spi > 0.25,
-        interaction_density > 5,
-        tdr < 0.65,
-        spi > 0.35,
-    ])
+    score = sum([tdr < 0.75, spi > 0.25, interaction_density > 5, tdr < 0.65, spi > 0.35])
     engagement = "High" if score >= 4 else "Medium" if score >= 2 else "Low"
 
     t_pct = int(100 * teacher_time / total_duration)
@@ -132,11 +74,11 @@ def analyze_transcript(transcript: dict) -> dict:
     if student_questions:
         parts.append(f"Students asked {len(student_questions)} question(s) — strong curiosity signal.")
     else:
-        parts.append("No student-initiated questions detected — encouraging Qs could deepen engagement.")
+        parts.append("No student-initiated questions detected.")
     if tdr > 0.75:
-        parts.append("TDR is high; consider more student-led discussion or pair work.")
+        parts.append("TDR is high; consider more student-led discussion.")
     if silence_time > 10:
-        parts.append(f"{int(silence_time)}s of silence detected — may reflect pauses for reflection.")
+        parts.append(f"{int(silence_time)}s of silence detected.")
 
     return {
         "labeled_segments": labeled,
