@@ -14,8 +14,9 @@
 5. [Tools and Models Used](#tools-and-models-used)
 6. [How to Run](#how-to-run)
 7. [Folder Structure](#folder-structure)
-8. [Assumptions](#assumptions)
-9. [Limitations](#limitations)
+8. [Demo Screenshots](#demo-screenshots)
+9. [Assumptions](#assumptions)
+10. [Limitations](#limitations)
 
 ---
 
@@ -264,6 +265,28 @@ classroom-voice-analytics/
     ├── transcriber.py      # Whisper + Pyannote pipeline
     └── analyzer.py         # Metrics computation
 ```
+
+---
+
+
+## Demo Screenshots
+
+### Audio Upload Interface
+<img src="assets/upload.jpeg" width="700"/>
+
+Upload classroom audio files (.wav / .mp3 / .m4a) for processing.
+
+---
+
+### Engagement Metrics Dashboard
+<img src="assets/metrics.jpeg" width="700"/>
+<img src="assets/charts.jpeg" width="700"/>
+
+
+---
+
+### Transcript with Speaker Labels
+<img src="assets/transcript.jpeg" width="700"/>
 
 ---
 
